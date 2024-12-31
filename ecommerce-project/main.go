@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"html/template"
 	"log"
 	"net/http"
 
@@ -13,6 +14,15 @@ import (
 )
 
 var db *mongo.Database
+var tmpl *template.Template
+
+func init() {
+	// Parse the HTML templates
+	tmpl = template.Must(template.ParseFiles(
+		"admin/header.html",       // Include the header template
+		"admin/admin_create.html", // Include your admin create page
+	))
+}
 
 func main() {
 	// Connect to MongoDB
@@ -31,12 +41,12 @@ func main() {
 	// Set up routes
 	r := mux.NewRouter()
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("admin/static/"))))
+
 	// Admin routes
-	r.HandleFunc("/admin/login", handlers.AdminLogin).Methods("POST")
 	r.HandleFunc("/admin/create", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			// Serve the admin_create.html file
-			http.ServeFile(w, r, "admin/admin_create.html")
+			// Render the admin_create.html template
+			renderTemplate(w, "admin_create.html", nil)
 		} else if r.Method == http.MethodPost {
 			handlers.CreateAdmin(w, r)
 		} else {
@@ -44,28 +54,34 @@ func main() {
 		}
 	}).Methods("GET", "POST")
 
+	// Admin login route
 	r.HandleFunc("/admin/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			// Serve the admin_create.html file
-			http.ServeFile(w, r, "admin/login.html")
+			renderTemplate(w, "admin_login.html", nil)
 		} else if r.Method == http.MethodPost {
 			handlers.CreateAdmin(w, r)
 		} else {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	}).Methods("GET", "POST")
-	r.HandleFunc("/admins", handlers.GetAdmin).Methods("GET")
-	r.HandleFunc("/admin/product/add", handlers.AddProduct).Methods("POST")
-	r.HandleFunc("/admin/product/edit/{id}", handlers.EditProduct).Methods("PUT")
-	r.HandleFunc("/admin/products", handlers.GetProducts).Methods("GET")
 
-	// Start server
-	http.Handle("/", r)
-	log.Println("Server running at http://localhost:8080/")
-	log.Fatal(http.ListenAndServe(":8080", nil)) // Server runs on port 8080
+	// Other routes...
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Welcome to the E-commerce Project"))
 	}).Methods("GET")
 
+	// Start server
+	http.Handle("/", r)
+	log.Println("Server running at http://localhost:8080/")
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+// renderTemplate renders the templates with the given name and data
+func renderTemplate(w http.ResponseWriter, tmplName string, data interface{}) {
+	// Execute the template (header + page)
+	err := tmpl.ExecuteTemplate(w, tmplName, data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
